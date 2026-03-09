@@ -1,0 +1,75 @@
+{
+  "command_draw_reading": {
+    "description": "📜 抽取阅读真题",
+    "type": "string",
+    "default": "来篇阅读",
+    "hint": "触发抽取一篇四六级阅读真题的指令"
+  },
+  "command_submit_answer": {
+    "description": "📝 提交做题答案",
+    "type": "string",
+    "default": "答案",
+    "hint": "做完阅读后提交选项，触发格式：/答案 ABCD"
+  },
+  "command_check_answer": {
+    "description": "👀 直接查看答案",
+    "type": "string",
+    "default": "查答案",
+    "hint": "不想做题时，直接查看当前阅读的答案"
+  },
+  "command_search_vocab": {
+    "description": "📖 查询单词释义",
+    "type": "string",
+    "default": "查单词",
+    "hint": "查询详细释义，触发格式：/查单词 abandon"
+  },
+  "command_random_vocab": {
+    "description": "🎲 随机单词闪测",
+    "type": "string",
+    "default": "抽单词",
+    "hint": "随机抽取5个单词测试记忆"
+  },
+  "command_get_new": {
+    "description": "🆕 批量拉取新词",
+    "type": "string",
+    "default": "今日新词",
+    "hint": "每天获取新单词进入记忆库，可加数字指定数量，例如：/今日新词 35"
+  },
+  "command_add_vocab": {
+    "description": "➕ 手动添加生词",
+    "type": "string",
+    "default": "加生词",
+    "hint": "在阅读中遇到生词手动加入，例如：/加生词 insight"
+  },
+  "command_review_vocab": {
+    "description": "⏰ 艾宾浩斯复习",
+    "type": "string",
+    "default": "今日复习",
+    "hint": "获取今天到期需要复习的单词表"
+  },
+  "command_forget_vocab": {
+    "description": "📉 遗忘惩罚降级",
+    "type": "string",
+    "default": "忘",
+    "hint": "没记住的单词打回原形，例如：/忘 abandon",
+    "obvious_hint": true
+  },
+  "command_my_stats": {
+    "description": "📊 查看个人战绩",
+    "type": "string",
+    "default": "我的词库",
+    "hint": "查看正在复习和永久掌握的单词数量"
+  },
+  "command_set_alarm": {
+    "description": "🔔 定时复习提醒",
+    "type": "string",
+    "default": "复习提醒",
+    "hint": "设置系统主动推送的时间，例如：/复习提醒 08:30"
+  },
+  "command_help": {
+    "description": "🆘 查看使用文档",
+    "type": "string",
+    "default": "使用文档",
+    "hint": "在聊天框输出插件的动态使用说明书"
+  }
+}
