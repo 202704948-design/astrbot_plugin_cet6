@@ -565,18 +565,28 @@ class CET6Tutor(Star):
     @filter.command(cfg.get("command_set_alarm", "复习提醒"))
     async def set_alarm(self, event: AstrMessageEvent, time_str: str = "08:00"):
         user_id = str(event.get_sender_id())
-        try: datetime.strptime(time_str, "%H:%M")
+        try: 
+            datetime.strptime(time_str, "%H:%M")
         except ValueError:
             yield event.plain_result("⚠️ 时间格式不对哦，请使用 24 小时制，比如：/复习提醒 08:30")
             return
 
-        platform = event.message_obj.platform
-        session_id = event.message_obj.session_id
+        # 🔪 终极修复：正确获取底层适配器(平台)和极其强壮的会话ID获取方式
+        platform = getattr(event, 'adapter_name', 'unknown')
+        
+        # 兼容不同平台（群聊/私聊）的 ID 获取
+        session_id = getattr(event.message_obj, 'session_id', '')
+        if not session_id:
+            session_id = getattr(event.message_obj, 'group_id', '') or getattr(event.message_obj, 'sender_id', '')
 
         self.subscribers[user_id] = {
-            "platform": platform, "session_id": session_id,
-            "time": time_str, "notified_today": False
+            "platform": platform, 
+            "session_id": session_id,
+            "time": time_str, 
+            "notified_today": False
         }
         self.save_subscribers()
+        
         yield event.plain_result(f"✅ 设置成功！我以后会在每天的 {time_str} 主动把复习词汇发给你，加油！")
+
 
