@@ -162,14 +162,22 @@ class CET6Tutor(Star):
             if os.path.exists(json_path):
                 with open(json_path, 'r', encoding='utf-8') as f:
                     raw_vocab = json.load(f)
-                if isinstance(raw_vocab, dict):
-                    for k, v in raw_vocab.items(): self.vocab_fast_dict[k.lower()] = json.dumps(v, ensure_ascii=False, indent=2) if isinstance(v, (dict, list)) else str(v)
-                elif isinstance(raw_vocab, list):
+                if isinstance(raw_vocab, list):
                     for item in raw_vocab:
-                        if isinstance(item, dict):
-                            for val in item.values():
-                                val_str = str(val).lower().strip()
-                                if val_str.isalpha(): self.vocab_fast_dict[val_str] = json.dumps(item, ensure_ascii=False, indent=2)
+                        if isinstance(item, dict) and "word" in item:
+                            word_key = str(item["word"]).lower().strip()
+                            # 🔪 智能提取词性和中文释义，丢掉多余的代码符号
+                            trans_list = []
+                            for t in item.get("translations", []):
+                                t_type = t.get("type", "")
+                                t_mean = t.get("translation", "").strip()
+                                if t_type:
+                                    trans_list.append(f"{t_type}. {t_mean}")
+                                else:
+                                    trans_list.append(t_mean)
+                            
+                            clean_meaning = "；".join(trans_list) if trans_list else "释义丢失"
+                            self.vocab_fast_dict[word_key] = clean_meaning
         except Exception: pass
 
         if os.path.exists(USER_VOCAB_PATH):
@@ -571,3 +579,4 @@ class CET6Tutor(Star):
         }
         self.save_subscribers()
         yield event.plain_result(f"✅ 设置成功！我以后会在每天的 {time_str} 主动把复习词汇发给你，加油！")
+
