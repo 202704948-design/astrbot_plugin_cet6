@@ -1,4 +1,4 @@
-# 🎓 AstrBot 插件：四六级金牌私教 (CET6 Tutor)
+# 🎓 AstrBot 插件：六级金牌私教 (CET6 Tutor)
 
 ![Version](https://img.shields.io/badge/Version-5.2.0-blue.svg) ![Framework](https://img.shields.io/badge/Framework-AstrBot-green.svg)
 
