@@ -624,6 +624,7 @@ class CET6Tutor(Star):
         human_time = self.get_human_time(now + EBBINGHAUS_INTERVALS[0])
         yield event.plain_result(f"📚 成功将 '{target_word}' 收入生词本！\n[当前境界: {RANKS[0]}]\n下次复习时间：{human_time}。")
 
+    # 🌟 终极一击必杀：优先级最高，强制满级，打上永远掌握的思想钢印
     @filter.command(cfg.get("command_kill_vocab", "斩"))
     async def kill_vocab(self, event: AstrMessageEvent, target_word: str = ""):
         kill_cmd = cfg.get("command_kill_vocab", "斩")
@@ -638,24 +639,32 @@ class CET6Tutor(Star):
             yield event.plain_result(f"⚠️ 词库里没有 '{target_word}'，此词过于生僻，无法斩杀。")
             return
 
-        if user_id not in self.mastered_vocab_db: self.mastered_vocab_db[user_id] = {}
+        if user_id not in self.mastered_vocab_db: 
+            self.mastered_vocab_db[user_id] = {}
 
+        # 优先级判断：如果已经是永远掌握的词汇
         if target_word in self.mastered_vocab_db[user_id]:
-            yield event.plain_result(f"⚔️ '{target_word}' 早已是你的刀下亡魂（已永久掌握），无需再斩！")
+            yield event.plain_result(f"⚔️ '{target_word}' 的记忆熟练度已是最高级【{RANKS[-1]}】！\n它早已被标记为『永远掌握』，无需再斩！")
             return
 
+        # 如果它目前还在复习列表里受苦，直接把它拖出来斩了！
         if user_id in self.user_vocab_db and target_word in self.user_vocab_db[user_id]:
             del self.user_vocab_db[user_id][target_word]
             self.save_user_vocab()
 
+        # 🌟 核心逻辑升级：将阶段(stage)和称号直接强制拉到最高级！
         now = time.time()
+        max_stage = len(EBBINGHAUS_INTERVALS)
         self.mastered_vocab_db[user_id][target_word] = {
             "graduated_time": now,
+            "stage": max_stage,    # 强制标记为满级阶段
+            "rank": RANKS[-1],     # 也就是 '精通 👑'
             "meaning": self.vocab_fast_dict.get(target_word, "释义丢失")
         }
         self.save_mastered_vocab()
-        yield event.plain_result(f"⚡ 剑气纵横！一击必杀！\n已将 '{target_word}' 直接斩入【🎓 永久掌握荣誉墙】！")
 
+        yield event.plain_result(f"⚡ 剑气纵横！一击必杀！\n'{target_word}' 的记忆程度已直接拉满至最高级【{RANKS[-1]}】！\n已将其打上『永远掌握』的思想钢印，并收入荣誉墙！")
+        
     def generate_review_report(self, user_id):
         if user_id not in self.user_vocab_db or not self.user_vocab_db[user_id]: return None
         now = time.time()
@@ -761,3 +770,4 @@ class CET6Tutor(Star):
         self.save_subscribers()
         yield event.plain_result(f"✅ 设置成功！我以后会在每天的 {time_str} 主动把复习词汇发给你，加油！")
         
+
