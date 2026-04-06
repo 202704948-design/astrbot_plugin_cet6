@@ -8,7 +8,9 @@ from datetime import datetime
 from astrbot.api.all import *
 from astrbot.api.event import filter
 from astrbot.api import logger
-from astrbot.api.message_components import Plain 
+from astrbot.api.message_components import Plain, File
+from astrbot.core.message.message_event_result import MessageChain 
+import re
 
 # ==========================================
 # ⚙️ 配置文件与存储路径
@@ -21,10 +23,14 @@ MASTERED_VOCAB_PATH = os.path.join(BASE_DIR, 'mastered_vocab.json')
 DONE_READINGS_PATH = os.path.join(BASE_DIR, 'done_readings.json') 
 # 🌟 新增：DIY 私人定制词库路径，你的心血都在这里
 CUSTOM_DICT_PATH = os.path.join(BASE_DIR, 'custom_dict.json')
+# 📖 阅读 HTML 生成
+TEMP_DIR = os.path.join(BASE_DIR, 'temp')
+READING_HTML_DIR = os.path.join(TEMP_DIR, 'reading')
+os.makedirs(READING_HTML_DIR, exist_ok=True)
 
 DEFAULT_CONFIG = {
     "command_draw_reading": "来篇阅读",
-    "command_submit_answer": "答案",
+    "command_submit_answer": "阅读答案",
     "command_check_answer": "查答案", 
     "command_random_vocab": "抽单词",
     "command_search_vocab": "查单词",
@@ -72,9 +78,12 @@ class CET6Tutor(Star):
         self.user_vocab_db = {} 
         self.subscribers = {} 
         self.mastered_vocab_db = {} 
-        self.done_readings_db = {} 
+        self.done_readings_db = {}
         self.custom_dict = {} # 🌟 私人定制大词库
-        
+
+        # 听力相关
+        self.done_db = load_done_listening()
+
         self.load_data()
         asyncio.create_task(self.daily_push_task())
 
@@ -87,33 +96,37 @@ class CET6Tutor(Star):
         year = today.year
         exam_june = datetime(year, 6, 13).date()
         exam_dec = datetime(year, 12, 13).date()
-        
+
         if today > exam_dec: next_exam = datetime(year + 1, 6, 13).date()
         elif today > exam_june: next_exam = exam_dec
         else: next_exam = exam_june
-            
+
         days_left = (next_exam - today).days
 
-        reply = "🎓 【 四六级金牌私教 - 终极使用指南 】 🎓\n"
-        reply += "=" * 28 + "\n"
-        reply += "📖 沉浸式阅读模块\n"
-        reply += f" ▫️ /{cfg.get('command_draw_reading', '来篇阅读')} : 抽取未做过的阅读\n"
-        reply += f" ▫️ /{cfg.get('command_submit_answer', '答案')} ABCD : 提交选项并出分\n"
-        reply += f" ▫️ /{cfg.get('command_check_answer', '查答案')} : 放弃做题，直接看答案\n\n"
-        reply += "🔥 单词核武器模块\n"
-        reply += f" ▫️ /{cfg.get('command_search_vocab', '查单词')} word : 查详细释义\n"
-        reply += f" ▫️ /{cfg.get('command_get_new', '今日新词')} 35 : 批量拉取新词\n"
-        reply += f" ▫️ /{cfg.get('command_add_vocab', '加生词')} word : 手动捕捉生词(支持自主补全释义！)\n\n"
-        reply += "🧠 艾宾浩斯引擎 & 互动测试\n"
-        reply += f" ▫️ /{cfg.get('command_review_vocab', '今日复习')} : 获取今日到期任务\n"
-        reply += f" ▫️ /拼写测试 或 /选义测试 : 极限挑战打破记忆幻觉\n"
-        reply += f" ▫️ /{cfg.get('command_forget_vocab', '忘')} word : 没记住？一键降级\n"
-        reply += f" ▫️ /{cfg.get('command_kill_vocab', '斩')} word : 太简单？斩入永远掌握\n" 
-        reply += f" ▫️ /{cfg.get('command_my_stats', '我的词库')} : 查看词库与战绩\n"
-        reply += f" ▫️ /{cfg.get('command_set_alarm', '复习提醒')} 08:30 : 设置定时推送\n"
-        reply += "=" * 28 + "\n"
-        reply += f"⏳ 距离下一次大考 ({next_exam.year}年{next_exam.month}月) 仅剩：{days_left} 天！\n"
-        reply += "💡 战友，时不我待，立刻拔剑吧！"
+        reply = "📚 四六级私教使用指南\n"
+        reply += "=" * 24 + "\n\n"
+        reply += "📖 阅读模块\n"
+        reply += "/来篇阅读 → 抽取一套阅读真题\n"
+        reply += "/阅读答案 ABCD → 提交阅读答案\n"
+        reply += "/查答案 → 直接查看答案\n\n"
+        reply += "🎧 听力模块\n"
+        reply += "/来个听力 → 抽取一套听力真题\n"
+        reply += "/听力答案 ABCD → 提交听力答案\n"
+        reply += "/听力跳过 → 跳过当前听力\n\n"
+        reply += "🔥 单词模块\n"
+        reply += "/查单词 word → 查询单词释义\n"
+        reply += "/加生词 word → 添加单词到生词本\n"
+        reply += "/释义 xxx → 为生词补充释义\n"
+        reply += "/今日新词 → 获取每日新词\n"
+        reply += "/今日复习 → 复习到期单词\n"
+        reply += "/拼写测试 → 单词拼写挑战\n"
+        reply += "/选义测试 → 单词含义挑战\n"
+        reply += "/忘 word → 标记单词未记住\n"
+        reply += "/斩 word → 标记单词已掌握\n"
+        reply += "/我的词库 → 查看学习进度\n"
+        reply += "/复习提醒 HH:MM → 设置提醒时间\n\n"
+        reply += "=" * 24 + "\n"
+        reply += f"距离下次大考（{next_exam.year}年{next_exam.month}月）还有 {days_left} 天💪"
         yield event.plain_result(reply)
 
     def get_human_time(self, timestamp):
@@ -146,7 +159,7 @@ class CET6Tutor(Star):
             await asyncio.sleep(60) 
 
     def load_data(self):
-        q_path = os.path.join(BASE_DIR, 'CET6_Perfect_Verified.json')
+        q_path = os.path.join(BASE_DIR, 'CET6_Perfect_Fixed.json')
         a_path = os.path.join(BASE_DIR, 'CET6_Answer.json')
         txt_path = os.path.join(BASE_DIR, '4 六级-乱序.txt')
         json_path = os.path.join(BASE_DIR, '4-CET6-顺序.json')
@@ -255,6 +268,209 @@ class CET6Tutor(Star):
         return clean_ans[:expected_len] if len(clean_ans) >= expected_len else clean_ans
 
     # ==========================================
+    # 📖 阅读 HTML 生成模块
+    # ==========================================
+
+    def _load_template(self, template_name: str) -> str:
+        """加载 HTML 模板文件"""
+        template_path = os.path.join(BASE_DIR, 'templates', template_name)
+        with open(template_path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    def _escape_html(self, text: str) -> str:
+        """转义 HTML 特殊字符"""
+        if not text:
+            return ''
+        return (text.replace('&', '&amp;')
+                .replace('<', '&lt;')
+                .replace('>', '&gt;')
+                .replace('"', '&quot;')
+                .replace("'", '&#39;'))
+
+    def _parse_passage_content(self, content: str, sec_type: str) -> str:
+        """解析文章内容，生成带题号的 HTML"""
+        lines = content.split('\n')
+        html_parts = []
+        current_q_num = None
+        in_question = False
+        in_options = False
+
+        # 判断题型
+        is_section_b = 'B' in sec_type and 'A' not in sec_type and 'C' not in sec_type
+        is_section_a = 'A' in sec_type and 'B' not in sec_type and 'C' not in sec_type
+
+        # Section B 段落匹配：先扫描有哪些段落标签
+        paragraph_labels = []
+        if is_section_b:
+            for line in lines:
+                # 匹配【 A 】或【A】格式的段落标签
+                label_match = re.search(r'【\s*([A-Z])\s*】', line)
+                if label_match:
+                    label = label_match.group(1)
+                    if label not in paragraph_labels:
+                        paragraph_labels.append(label)
+            paragraph_labels.sort()
+
+        for line in lines:
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+
+            # 判断是否是题目行 (数字开头如 26. 36. 46. 51.)
+            q_match = re.match(r'^(\d+)\.\s*(.*)$', line_stripped)
+            if q_match:
+                # 闭合之前的题目
+                if in_question and current_q_num is not None:
+                    if in_options:
+                        html_parts.append('</div>')
+                    html_parts.append('</div>')
+                    in_options = False
+
+                current_q_num = q_match.group(1)
+                q_text = q_match.group(2)
+                in_question = True
+
+                if is_section_b:
+                    # Section B: 段落匹配题，选项是识别到的段落标签
+                    html_parts.append(f'<div class="question-item">')
+                    html_parts.append(f'<div class="q-text">{current_q_num}. {self._escape_html(q_text)}</div>')
+                    html_parts.append('<div class="q-options passage-match">')
+                    for label in paragraph_labels:
+                        html_parts.append(f'<label><input type="radio" name="q_{current_q_num}" value="{label}"> {label}</label>')
+                    html_parts.append('</div></div>')
+                    in_question = False
+                    current_q_num = None
+                    continue
+                elif is_section_a:
+                    # Section A: 选词填空，使用单词芯片选择
+                    html_parts.append(f'<div class="question-item">')
+                    html_parts.append(f'<div class="q-text">{current_q_num}. {self._escape_html(q_text)}</div>')
+                    html_parts.append('<div class="q-options">')
+                    in_options = True
+                else:
+                    # Section C: 选择题
+                    html_parts.append(f'<div class="question-item">')
+                    html_parts.append(f'<div class="q-text">{current_q_num}. {self._escape_html(q_text)}</div>')
+                    html_parts.append('<div class="q-options">')
+                    in_options = True
+                continue
+
+            # 检查是否是选项行 (A) B) C) D))
+            opt_match = re.match(r'^([A-D])\)\s*(.+)$', line_stripped)
+            if opt_match and current_q_num is not None:
+                letter = opt_match.group(1)
+                text = opt_match.group(2)
+                html_parts.append(f'<label><input type="radio" name="q_{current_q_num}" value="{letter}"> {letter}. {self._escape_html(text)}</label>')
+                continue
+
+            # 检查是否是 Section A 的词库行 (A)word  I)word)
+            if is_section_a and 'A)' in line_stripped and 'I)' in line_stripped:
+                # 解析词库芯片
+                word_bank_items = []
+                # 用正则匹配所有 A)word 格式
+                for m in re.finditer(r'([A-O])\)\s*([^\s]+)', line_stripped.replace('\xa0', ' ')):
+                    letter, word = m.group(1), m.group(2).strip()
+                    word_bank_items.append(f'<span class="word-chip" onclick="selectWord(\'{letter}\')">{letter}) {self._escape_html(word)}</span>')
+                if word_bank_items:
+                    html_parts.append('<div class="word-bank"><h4>选词填空 - 词汇表（点击选择）</h4><div class="word-options">' + ''.join(word_bank_items) + '</div></div>')
+                continue
+
+            # 普通段落内容
+            if in_question and in_options and current_q_num is not None:
+                # 还没遇到选项，还在问题区域，当作段落处理
+                html_parts.append('</div></div>')
+                in_question = False
+                in_options = False
+
+            # 段落加标签
+            if '【' in line_stripped and '】' in line_stripped:
+                html_parts.append(f'<p class="passage-para" style="font-weight:bold;">{self._escape_html(line_stripped)}</p>')
+            else:
+                html_parts.append(f'<p class="passage-para">{self._escape_html(line_stripped)}</p>')
+
+        # 闭合最后的题目
+        if in_question and current_q_num is not None and in_options:
+            html_parts.append('</div></div>')
+
+        return '\n'.join(html_parts)
+
+    def generate_reading_html(self, item: dict, user_id: str, q_id: str, correct_ans: str) -> str:
+        """生成阅读理解的 HTML 文件"""
+        meta = item['meta']
+        content = item['content']
+        sec_type = item['type']
+        year = meta.get('year', '')
+        month = meta.get('month', '')
+        set_idx = meta.get('set_index', '')
+
+        # 解析内容
+        content_html = self._parse_passage_content(content, sec_type)
+
+        # 加载模板
+        template = self._load_template('reading_template.html')
+
+        # 替换占位符
+        html = template.replace('{{year}}', year)
+        html = html.replace('{{month}}', month)
+        html = html.replace('{{set_idx}}', set_idx)
+        html = html.replace('{{sec_type}}', sec_type)
+        html = html.replace('{{content}}', content_html)
+        html = html.replace('{{answers}}', correct_ans)  # 嵌入正确答案
+        html = html.replace('{{result_key}}', q_id)  # 嵌入结果key用于标记完成
+
+        # 保存文件
+        timestamp = int(time.time())
+        html_filename = f'reading_{user_id}_{timestamp}.html'
+        html_path = os.path.join(READING_HTML_DIR, html_filename)
+
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(html)
+
+        return html_path
+
+    def generate_reading_result_html(self, user_ans: str, correct_ans: str, meta: dict, sec_type: str) -> tuple:
+        """生成阅读结果的 HTML，返回 (html, score, total, pct)"""
+        year = meta.get('year', '')
+        month = meta.get('month', '')
+        set_idx = meta.get('set_index', '')
+
+        user_ans = user_ans.upper().replace(' ', '')
+        correct_ans = correct_ans.upper()
+
+        # 计算得分
+        score = 0
+        details = []
+        for i, c in enumerate(correct_ans):
+            if i < len(user_ans) and user_ans[i] == c:
+                score += 1
+                status = 'correct'
+                detail_text = f'Q{i+1}: ✅ 正确'
+            else:
+                status = 'wrong'
+                user_answer = user_ans[i] if i < len(user_ans) else '_'
+                detail_text = f'Q{i+1}: ❌ 你的答案: {user_answer} → 正确答案: {c}'
+            details.append(f'<div class="detail-item {status}">{detail_text}</div>')
+
+        total = len(correct_ans)
+        pct = round(score / total * 100, 1) if total > 0 else 0
+
+        # 加载模板
+        template = self._load_template('reading_result_template.html')
+
+        html = template.replace('{{year}}', year)
+        html = html.replace('{{month}}', month)
+        html = html.replace('{{set_idx}}', set_idx)
+        html = html.replace('{{score}}', str(score))
+        html = html.replace('{{total}}', str(total))
+        html = html.replace('{{pct}}', str(pct))
+        html = html.replace('{{sec_a_score}}', '0')  # 简化版
+        html = html.replace('{{sec_b_score}}', '0')
+        html = html.replace('{{sec_c_score}}', '0')
+        html = html.replace('{{details}}', '\n'.join(details))
+
+        return html, score, total, pct
+
+    # ==========================================
     # 📖 阅读与 ⚔️ 互动测试引擎 (多路由设计)
     # ==========================================
     @filter.command(cfg.get("command_draw_reading", "来篇阅读"))
@@ -291,10 +507,21 @@ class CET6Tutor(Star):
         ans_cmd = cfg.get("command_submit_answer", "答案")
         chk_cmd = cfg.get("command_check_answer", "查答案")
         progress_str = f" [进度: {len(done_list)}/{len(self.questions)}]"
-        
-        reply = f"📜 考卷锁定: {meta.get('year')}年 {meta.get('month')}月 第{meta.get('set_index')}套 | {sec_type}{progress_str}\n" + "=" * 25 + "\n"
-        reply += item['content'] + f"\n\n💡 提示：本题共 {len(correct_ans)} 道题。\n👉 做完请回复：/{ans_cmd} ABCD\n👉 纯阅读想看答案回复：/{chk_cmd}"
-        yield event.plain_result(reply)
+
+        # 生成 HTML 文件
+        html_path = self.generate_reading_html(item, user_id, q_id, correct_ans)
+
+        html_filename = f"阅读_{meta.get('year')}_{meta.get('month')}_第{meta.get('set_index')}套_{sec_type}.html"
+        reply = f"📖 阅读真题 | {meta.get('year')}年 {meta.get('month')}月 第{meta.get('set_index')}套 | {sec_type}\n"
+        reply += f"📝 共 {len(correct_ans)} 题 | 进度 {len(done_list)}/{len(self.questions)}\n"
+        reply += f"━━━━━━━━━━━━━━\n"
+        reply += f"作答后发送：/{ans_cmd} ABCD...\n"
+        reply += f"直接查答案：/{chk_cmd}"
+
+        yield event.chain_result([
+            Plain(reply),
+            File(name=html_filename, file=html_path)
+        ])
 
     @filter.command("拼写测试")
     async def spell_test(self, event: AstrMessageEvent):
@@ -460,6 +687,63 @@ class CET6Tutor(Star):
             self.save_user_vocab()
             del self.user_sessions[user_id]
             yield event.plain_result(reply)
+
+    @filter.command("读完成")
+    async def mark_reading_done(self, event: AstrMessageEvent, params: str = ""):
+        """直接从HTML复制命令标记完成，格式：/读完成 key 答案"""
+        if not params:
+            yield event.plain_result("📋 格式：/读完成 2018_06_1_Section A ABCD...\n请从HTML页面点击「标记完成」按钮获取完整命令。")
+            return
+
+        parts = params.strip().split(maxsplit=1)
+        if len(parts) < 2:
+            yield event.plain_result("📋 格式：/读完成 2018_06_1_Section A ABCD...\n请从HTML页面点击「标记完成」按钮获取完整命令。")
+            return
+
+        q_id = parts[0]
+        user_ans = parts[1].upper().replace(" ", "")
+
+        # 查找对应的题目
+        item = None
+        for q in self.questions:
+            if self.get_q_id(q['meta'], q['type']) == q_id:
+                item = q
+                break
+
+        if not item:
+            yield event.plain_result(f"📋 未找到该试卷：{q_id}")
+            return
+
+        correct_ans = self.get_answer_key(item['meta'], item['type'])
+        if not correct_ans:
+            yield event.plain_result(f"📋 该试卷没有答案数据")
+            return
+
+        user_id = str(event.get_sender_id())
+        sec_type = item['type']
+
+        # 计算得分
+        score = 0
+        for i, c in enumerate(correct_ans.upper()):
+            if i < len(user_ans) and user_ans[i] == c:
+                score += 1
+
+        total = len(correct_ans)
+        pct = round(score / total * 100, 1) if total > 0 else 0
+
+        # 标记完成
+        if score == total:
+            self.mark_question_done(user_id, q_id)
+            status = "🎉 满分通关！"
+        else:
+            status = "💪 未获满分，本题未标记为已刷。"
+
+        meta = item['meta']
+        reply = f"✅ 【标记完成】\n"
+        reply += f"试卷: {meta.get('year')}年 {meta.get('month')}月 第{meta.get('set_index')}套 | {sec_type}\n"
+        reply += f"得分: {score} / {total} ({pct}%)\n"
+        reply += status
+        yield event.plain_result(reply)
 
     # ==========================================
     # 🧠 UCG 进化大词库模块 (录入系统)
@@ -795,4 +1079,389 @@ class CET6Tutor(Star):
         }
         self.save_subscribers()
         yield event.plain_result(f"✅ 设置成功！我以后会在每天的 {time_str} 主动把复习词汇发给你，加油！")
+
+# ==========================================
+# 🎧 听力模块
+# ==========================================
+LISTENING_DIR = os.path.join(BASE_DIR, "CET-6听力")
+LQ_PATH = os.path.join(BASE_DIR, "listening_questions_v3.json")
+LDONE_PATH = os.path.join(BASE_DIR, "done_listening.json")
+LISTENING_HTML_DIR = os.path.join(TEMP_DIR, 'listening')
+
+DEFAULT_LQ = {
+    "command_listening": "来个听力",
+    "command_listen_answer": "听力答案",
+    "command_listen_skip": "听力跳过"
+}
+
+try:
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+        lq_cfg = json.load(f)
+except Exception:
+    lq_cfg = {}
+
+lq_updated = False
+for k, v in DEFAULT_LQ.items():
+    if k not in lq_cfg:
+        lq_cfg[k] = v
+        lq_updated = True
+if lq_updated:
+    try:
+        with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+            json.dump(lq_cfg, f, ensure_ascii=False, indent=4)
+    except Exception:
+        pass
+
+try:
+    with open(LQ_PATH, 'r', encoding='utf-8') as f:
+        lq_db = json.load(f)
+except Exception:
+    lq_db = {}
+
+def load_done_listening():
+    if os.path.exists(LDONE_PATH):
+        try:
+            with open(LDONE_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_done_listening(data):
+    try:
+        if os.path.exists(LDONE_PATH):
+            shutil.copyfile(LDONE_PATH, LDONE_PATH + ".bak")
+        with open(LDONE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logger.error(f"[CET6 Listening] 保存 {LDONE_PATH} 失败：{e}")
+
+    # ==========================================
+    # 🎧 听力相关方法
+    # ==========================================
+    def _load_template(self, template_name: str) -> str:
+        """加载 HTML 模板文件"""
+        template_path = os.path.join(BASE_DIR, 'templates', template_name)
+        with open(template_path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    def _escape_html(self, text: str) -> str:
+        """转义 HTML 特殊字符"""
+        if not text:
+            return ''
+        return (text.replace('&', '&amp;')
+                .replace('<', '&lt;')
+                .replace('>', '&gt;')
+                .replace('"', '&quot;')
+                .replace("'", '&#39;'))
+
+    def generate_listening_html(self, key: str, user_id: str) -> str:
+        """生成听力的 HTML 文件"""
+        info = lq_db[key]
+        meta = info.get('meta', {})
+        sections = info.get('sections', {})
+        answers = info.get('answers', {})
+        total = info.get('total', 25)
+
+        year = meta.get('year', '')
+        month = meta.get('month', '')
+        set_num = meta.get('set_num', '')
+        mp3_file = meta.get('mp3_file', '')
+        mp3_path = os.path.join(LISTENING_DIR, mp3_file)
+
+        # 生成音频播放器（嵌入Base64格式，单文件即可播放）
+        has_audio = os.path.exists(mp3_path)
+        if has_audio:
+            import base64
+            with open(mp3_path, 'rb') as f:
+                mp3_b64 = base64.b64encode(f.read()).decode('utf-8')
+            audio_player = f'<audio id="audioPlayer" class="audio-player" controls preload="metadata"><source src="data:audio/mpeg;base64,{mp3_b64}" type="audio/mpeg"></audio>'
+            audio_note = f'音频已嵌入，点击播放即可'
+        else:
+            audio_player = '<p style="color:#c62828;">⚠️ 音频文件不存在</p>'
+            audio_note = ''
+
+        # 生成各 Section 的 HTML
+        sections_html = ''
+        section_types = {
+            'A': ('长对话', range(1, 9)),
+            'B': ('短文理解', range(9, 16)),
+            'C': ('讲座/讲话', range(16, 26))
+        }
+
+        for sec_key, (sec_name, q_range) in section_types.items():
+            sec_data = sections.get(sec_key, {})
+            questions = sec_data.get('questions', [])
+
+            if not questions:
+                continue
+
+            sections_html += f'''
+<div class="section">
+    <div class="section-header">
+        <h2>Section {sec_key}: {sec_name}</h2>
+        <div class="info">Q{q_range.start}-{q_range.stop-1} 共 {len([q for q in questions if q.get('q_num') in q_range])} 题</div>
+    </div>
+'''
+            for q in questions:
+                q_num = q.get('q_num', 0)
+                if q_num not in q_range:
+                    continue
+                options = q.get('options', {})
+
+                sections_html += f'''
+    <div class="question-item">
+        <div class="q-header">
+            <span class="q-num">Q{q_num}</span>
+            <span class="q-note">[听力原题]</span>
+        </div>
+        <div class="options">
+'''
+                for letter in ['A', 'B', 'C', 'D']:
+                    opt_text = options.get(letter, '')
+                    if opt_text:
+                        sections_html += f'''            <label onclick="selectOption({q_num}, '{letter}')">
+                <input type="radio" name="q_{q_num}" value="{letter}" onclick="selectOption({q_num}, '{letter}')">
+                <span class="opt-letter">{letter}.</span>
+                <span>{self._escape_html(opt_text)}</span>
+            </label>
+'''
+                sections_html += '        </div>\n    </div>\n'
+
+            sections_html += '</div>\n'
+
+        # 生成答案预览
+        answer_preview = ''
+        for i in range(1, total + 1):
+            answer_preview += f'<span class="q-mark">Q{i}:?</span>'
+        answer_preview = answer_preview or '<span style="color:#999;">等待选择...</span>'
+
+        # 生成正确答案字符串（按题号顺序）
+        correct_ans_str = ''.join(answers.get(str(i), '_') for i in range(1, total + 1))
+
+        # 加载模板并替换占位符
+        template = self._load_template('listening_template.html')
+        html = template.replace('{{year}}', year)
+        html = html.replace('{{month}}', month)
+        html = html.replace('{{set_num}}', set_num)
+        html = html.replace('{{total}}', str(total))
+        html = html.replace('{{audio_player}}', audio_player)
+        html = html.replace('{{audio_note}}', audio_note)
+        html = html.replace('{{sections}}', sections_html)
+        html = html.replace('{{answer_preview}}', answer_preview)
+        html = html.replace('{{answers}}', correct_ans_str)  # 嵌入正确答案
+        html = html.replace('{{result_key}}', key)  # 嵌入结果key用于标记完成
+
+        # 保存 HTML 文件
+        os.makedirs(LISTENING_HTML_DIR, exist_ok=True)
+        timestamp = int(time.time())
+        html_filename = f'listening_{user_id}_{timestamp}.html'
+        html_path = os.path.join(LISTENING_HTML_DIR, html_filename)
+
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(html)
+
+        return html_path
+
+    @filter.command(lq_cfg.get("command_listening", "来个听力"))
+    async def draw_listening(self, event: AstrMessageEvent):
+        user_id = str(event.get_sender_id())
+        done_list = self.done_db.get(user_id, [])
+        available = [k for k in lq_db if k not in done_list]
+
+        if not lq_db:
+            yield event.plain_result("⚠️ 听力题库未加载成功。")
+            return
+
+        if not available:
+            yield event.plain_result("🎧 全部听力已刷完！太厉害了，等下次更新题库吧。")
+            return
+
+        key = random.choice(available)
+        info = lq_db[key]
+        meta = info.get("meta", {})
+        total = info.get("total", 25)
+
+        self.user_sessions[user_id] = {
+            "session_type": "listening",
+            "key": key,
+            "total": total,
+            "time": time.time()
+        }
+
+        # 生成 HTML 文件
+        html_path = self.generate_listening_html(key, user_id)
+
+        mp3_path = os.path.join(LISTENING_DIR, meta.get("mp3_file", "")) if meta.get("mp3_file") else ""
+        has_audio = os.path.exists(mp3_path)
+
+        html_filename = f"听力_{meta.get('year')}_{meta.get('month')}_第{meta.get('set_num')}套.html"
+        reply = f"🎧 听力真题 | {meta.get('year', '?')}年{meta.get('month', '?')}月 第{meta.get('set_num', '?')}套\n"
+        reply += f"📝 共{total}题 | 进度 {len(done_list)}/{len(lq_db)}\n"
+        if has_audio:
+            reply += f"🎵 音频已嵌入HTML，直接播放即可\n"
+        else:
+            reply += f"⚠️ 音频暂缺\n"
+        reply += f"━━━━━━━━━━━━━━\n"
+        reply += f"作答后发送：/{lq_cfg.get('command_listen_answer', '听力答案')} ABCD...\n"
+        reply += f"直接看答案：/{lq_cfg.get('command_listen_skip', '听力跳过')}"
+
+        yield event.chain_result([
+            Plain(reply),
+            File(name=html_filename, file=html_path)
+        ])
+
+    @filter.command(lq_cfg.get("command_listen_skip", "听力跳过"))
+    async def skip_listening(self, event: AstrMessageEvent):
+        user_id = str(event.get_sender_id())
+        if user_id not in self.user_sessions or self.user_sessions[user_id].get("session_type") != "listening":
+            yield event.plain_result("📋 当前没有正在做的听力题。")
+            return
+
+        key = self.user_sessions[user_id]["key"]
+        info = lq_db[key]
+        answers = info.get("answers", {})
+        meta = info.get("meta", {})
+
+        if user_id not in self.done_db:
+            self.done_db[user_id] = []
+        if key not in self.done_db[user_id]:
+            self.done_db[user_id].append(key)
+        save_done_listening(self.done_db)
+
+        del self.user_sessions[user_id]
+
+        q1_8 = "".join(answers.get(str(i), answers.get(i, "?")) for i in range(1, 9))
+        q9_15 = "".join(answers.get(str(i), answers.get(i, "?")) for i in range(9, 16))
+        q16_25 = "".join(answers.get(str(i), answers.get(i, "?")) for i in range(16, 26))
+
+        reply = f"📋 【听力答案】{meta.get('year', '?')}年{meta.get('month', '?')}月 第{meta.get('set_num', '?')}套\n"
+        reply += "=" * 24 + "\n"
+        reply += f"Q1-8  (长对话):  {q1_8}\n"
+        reply += f"Q9-15 (短文):    {q9_15}\n"
+        reply += f"Q16-25(讲座):    {q16_25}\n"
+        reply += "=" * 24 + "\n"
+        reply += "本套已标记为【跳过】下次不会重复出现"
+
+        yield event.plain_result(reply)
+
+    @filter.command(lq_cfg.get("command_listen_answer", "听力答案"))
+    async def grade_listening(self, event: AstrMessageEvent, user_ans: str = ""):
+        ans_cmd = lq_cfg.get("command_listen_answer", "听力答案")
+        if not user_ans:
+            yield event.plain_result(f"📋 请带上你的答案，例如: /{ans_cmd} ABCDABCD...")
+            return
+
+        user_id = str(event.get_sender_id())
+        if user_id not in self.user_sessions or self.user_sessions[user_id].get("session_type") != "listening":
+            yield event.plain_result("📋 当前没有正在做的听力题。")
+            return
+
+        session = self.user_sessions[user_id]
+        key = session["key"]
+        info = lq_db[key]
+        answers = info.get("answers", {})
+        meta = info.get("meta", {})
+        total = session["total"]
+
+        clean = re.sub(r'[^A-Za-z]', '', user_ans.strip().upper())
+
+        score = 0
+        results = []
+        section_marks = []
+        for i in range(total):
+            q_num = i + 1
+            u = clean[i] if i < len(clean) else "_"
+            c = answers.get(str(q_num), answers.get(q_num, "?"))
+            if u == c:
+                score += 1
+                results.append(f"Q{q_num}: ✅")
+                section_marks.append("✅")
+            else:
+                results.append(f"Q{q_num}: ❌ (你的:{u} → 正确:{c})")
+                section_marks.append("❌")
+
+        pct = round(score / total * 100, 1) if total else 0
+        r1 = "".join(section_marks[0:8])
+        r2 = "".join(section_marks[8:15])
+        r3 = "".join(section_marks[15:25])
+
+        reply = f"📊 【批改报告】{meta.get('year', '?')}年{meta.get('month', '?')}月 第{meta.get('set_num', '?')}套\n"
+        reply += f"得分: {score} / {total} ({pct}%)\n"
+        reply += f"Section A(Q1-8):  {r1}\n"
+        reply += f"Section B(Q9-15): {r2}\n"
+        reply += f"Section C(Q16-25):{r3}\n"
+        reply += "=" * 24 + "\n"
+        for idx, r in enumerate(results, 1):
+            reply += r + "  "
+            if idx % 4 == 0:
+                reply += "\n"
+        reply += "\n"
+
+        if pct == 100:
+            reply += "🎉 满分！听力满分选手！"
+        elif pct >= 80:
+            reply += "👏 优秀！继续保持！"
+        elif pct >= 60:
+            reply += "💪 及格线以上，还需加强。"
+        else:
+            reply += "📚 建议先通读原文再听一遍。"
+
+        if user_id not in self.done_db:
+            self.done_db[user_id] = []
+        if key not in self.done_db[user_id]:
+            self.done_db[user_id].append(key)
+            save_done_listening(self.done_db)
+
+        del self.user_sessions[user_id]
+        yield event.plain_result(reply)
+
+    @filter.command("听完成")
+    async def mark_listening_done(self, event: AstrMessageEvent, params: str = ""):
+        """直接从HTML复制命令标记完成，格式：/听完成 key 答案"""
+        if not params:
+            yield event.plain_result("📋 格式：/听完成 2023_06_1 ABCD...\n请从HTML页面点击「标记完成」按钮获取完整命令。")
+            return
+
+        parts = params.strip().split()
+        if len(parts) < 2:
+            yield event.plain_result("📋 格式：/听完成 2023_06_1 ABCD...\n请从HTML页面点击「标记完成」按钮获取完整命令。")
+            return
+
+        key = parts[0]
+        user_ans = parts[1].upper()
+
+        if key not in lq_db:
+            yield event.plain_result(f"📋 未找到该试卷：{key}")
+            return
+
+        user_id = str(event.get_sender_id())
+        info = lq_db[key]
+        answers = info.get("answers", {})
+        total = info.get("total", 25)
+
+        # 计算得分
+        score = 0
+        for i in range(1, total + 1):
+            correct = answers.get(str(i), '_')
+            user = user_ans[i-1] if i-1 < len(user_ans) else '_'
+            if user == correct:
+                score += 1
+
+        pct = round(score / total * 100, 1) if total > 0 else 0
+
+        # 标记完成
+        if user_id not in self.done_db:
+            self.done_db[user_id] = []
+        if key not in self.done_db[user_id]:
+            self.done_db[user_id].append(key)
+            save_done_listening(self.done_db)
+
+        meta = info.get("meta", {})
+        reply = f"✅ 【标记完成】\n"
+        reply += f"试卷: {meta.get('year', '?')}年{meta.get('month', '?')}月 第{meta.get('set_num', '?')}套\n"
+        reply += f"得分: {score} / {total} ({pct}%)\n"
+        reply += f"已加入已完成列表！"
+        yield event.plain_result(reply)
+
 

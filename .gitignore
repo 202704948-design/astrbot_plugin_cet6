@@ -221,3 +221,9 @@ config.json
 # 忽略 Python 缓存
 __pycache__/
 *.pyc
+
+# 忽略原始PDF题目文件夹
+cet-6题目/
+
+# 忽略中间数据文件
+listening_index.json
