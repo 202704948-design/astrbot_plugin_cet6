@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>六级阅读 - {{year}}年{{month}}月 第{{set_idx}}套 | {{sec_type}}</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.8; padding: 20px; max-width: 900px; margin: 0 auto; background: #f5f5f5; }
+.header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
+.header h1 { font-size: 1.5em; margin-bottom: 5px; }
+.header .meta { opacity: 0.9; font-size: 0.9em; }
+.tips { background: #e8f4fd; padding: 15px; border-radius: 8px; margin: 20px 0; color: #31708f; font-size: 0.9em; }
+.passage { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+.passage-para { margin-bottom: 15px; text-indent: 2em; }
+.word-bank { background: #fff9e6; padding: 15px; border-radius: 8px; margin-top: 20px; border: 2px dashed #ffd700; }
+.word-bank h4 { margin-bottom: 10px; color: #b8860b; }
+.word-options { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.word-chip { padding: 5px 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 20px; font-size: 0.9em; cursor: pointer; user-select: none; }
+.word-chip:hover { opacity: 0.8; }
+.word-chip.selected { background: #4caf50; }
+.question-item { background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.08); }
+.q-text { font-weight: 500; margin-bottom: 10px; }
+.q-options { display: flex; flex-direction: column; gap: 8px; }
+.q-options label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; padding: 5px; border-radius: 5px; transition: background 0.2s; }
+.q-options label:hover { background: #f0f0f0; }
+.q-options input[type="radio"] { margin-top: 4px; }
+.tf-options { display: flex; gap: 20px; margin-top: 10px; }
+.tf-options label { display: flex; align-items: center; gap: 5px; }
+.submit-area { background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+.answer-preview { margin: 15px 0; padding: 15px; background: #f5f5f5; border-radius: 8px; font-size: 1.2em; letter-spacing: 2px; min-height: 40px; display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+.submit-area input { padding: 12px 20px; font-size: 1em; border: 2px solid #ddd; border-radius: 8px; width: 80%; max-width: 400px; }
+.submit-btn { display: inline-block; padding: 12px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 10px; font-size: 1em; cursor: pointer; margin: 5px; transition: transform 0.2s, box-shadow 0.2s; }
+.submit-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4); }
+.submit-btn.secondary { background: #666; }
+.submit-btn.secondary:hover { background: #555; }
+/* 结果显示 */
+.result-section { display: none; background: white; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+.result-header { text-align: center; margin-bottom: 20px; }
+.result-score { font-size: 3em; font-weight: bold; color: #667eea; }
+.result-pct { font-size: 1.2em; color: #666; }
+.result-details { margin-top: 20px; }
+.result-item { padding: 12px; margin: 8px 0; border-radius: 8px; font-size: 0.95em; display: flex; align-items: center; gap: 10px; }
+.result-item.correct { background: #e8f5e9; border-left: 4px solid #4caf50; color: #2e7d32; }
+.result-item.wrong { background: #ffebee; border-left: 4px solid #f44336; color: #c62828; }
+.result-item .q-num { font-weight: bold; min-width: 50px; }
+.result-item .your-ans { color: #c62828; }
+.result-item .correct-ans { color: #2e7d32; font-weight: bold; }
+.result-item .q-label { flex: 1; }
+</style>
+</head>
+<body>
+<div class="header">
+    <h1>📖 六级阅读理解</h1>
+    <div class="meta">{{year}}年{{month}}月 第{{set_idx}}套 | {{sec_type}}</div>
+</div>
+
+<div class="tips">
+    <strong>📌 做题提示：</strong>请在下方阅读文章并作答。完成后点击"核对答案"查看结果。
+</div>
+
+<div class="passage">
+{{content}}
+</div>
+
+<div class="submit-area">
+    <p style="color:#666;margin-bottom:10px;">你的答案（点击选项会自动更新）：</p>
+    <div class="answer-preview" id="answerPreview">等待选择...</div>
+    <div style="margin-top:15px;">
+        <button type="button" class="submit-btn" onclick="checkAnswer()">📝 核对答案</button>
+        <button type="button" class="submit-btn" style="background:#4caf50;" onclick="markDone()">✅ 标记完成</button>
+    </div>
+</div>
+
+<div class="result-section" id="resultSection">
+    <div class="result-header">
+        <h2>📊 答题结果</h2>
+        <div class="result-score" id="resultScore">0 / 0</div>
+        <div class="result-pct" id="resultPct">正确率: 0%</div>
+    </div>
+    <div class="result-details" id="resultDetails"></div>
+    <div style="text-align:center;margin-top:20px;">
+        <button type="button" class="submit-btn" onclick="window.close()">关闭页面</button>
+    </div>
+</div>
+
+<script>
+const correctAnswers = "{{answers}}";  // 正确答案，如 "ABCDABCDAB"
+const totalQuestions = correctAnswers.length;
+const resultKey = "{{result_key}}";  // 用于标记完成的key
+
+function updateAnswer() {
+    const answers = [];
+    const radios = document.querySelectorAll('input[type="radio"]:checked');
+    radios.forEach(radio => {
+        const name = radio.name;
+        if (name.startsWith('q_')) {
+            const qNum = parseInt(name.split('_')[1]);
+            answers.push({qNum, value: radio.value});
+        }
+    });
+    answers.sort((a, b) => a.qNum - b.qNum);
+    const answerStr = answers.map(a => a.value).join('');
+    document.getElementById('answerPreview').textContent = answerStr || '等待选择...';
+}
+
+function selectWord(letter) {
+    const preview = document.getElementById('answerPreview');
+    const current = preview.textContent;
+    if (current === '等待选择...' || current === '请选择词汇...') {
+        preview.textContent = letter;
+    } else {
+        preview.textContent = current + letter;
+    }
+    alert('已选择: ' + letter + '\n已添加到答案末尾');
+}
+
+function checkAnswer() {
+    const answers = [];
+    const radios = document.querySelectorAll('input[type="radio"]:checked');
+    radios.forEach(radio => {
+        const name = radio.name;
+        if (name.startsWith('q_')) {
+            const qNum = parseInt(name.split('_')[1]);
+            answers.push({qNum, value: radio.value});
+        }
+    });
+    answers.sort((a, b) => a.qNum - b.qNum);
+    const userAns = answers.map(a => a.value).join('');
+
+    let score = 0;
+    let detailsHtml = '';
+
+    for (let i = 0; i < totalQuestions; i++) {
+        const qNum = i + 1;
+        const correct = correctAnswers[i];
+        const user = userAns[i] || '_';
+        const isCorrect = user === correct;
+        if (isCorrect) score++;
+
+        const statusClass = isCorrect ? 'correct' : 'wrong';
+        const statusIcon = isCorrect ? '✅' : '❌';
+        detailsHtml += `<div class="result-item ${statusClass}">
+            <span class="q-num">Q${qNum}</span>
+            <span class="q-label">${statusIcon} 你的答案: <span class="your-ans">${user}</span> ${isCorrect ? '' : '→ 正确答案: <span class="correct-ans">' + correct + '</span>'}</span>
+        </div>`;
+    }
+
+    const pct = Math.round(score / totalQuestions * 100);
+    document.getElementById('resultScore').textContent = score + ' / ' + totalQuestions;
+    document.getElementById('resultPct').textContent = '正确率: ' + pct + '%';
+    document.getElementById('resultDetails').innerHTML = detailsHtml;
+    document.getElementById('resultSection').style.display = 'block';
+    document.getElementById('resultSection').scrollIntoView({behavior: 'smooth'});
+}
+
+function copyAnswer() {
+    const answer = document.getElementById('answerPreview').textContent;
+    if (answer === '等待选择...' || !answer) {
+        alert('请先选择答案！');
+        return;
+    }
+    navigator.clipboard.writeText(answer).then(() => {
+        alert('答案已复制：' + answer);
+    }).catch(() => {
+        prompt('复制失败，请手动复制：', answer);
+    });
+}
+
+function markDone() {
+    const answer = document.getElementById('answerPreview').textContent;
+    if (answer === '等待选择...' || !answer) {
+        alert('请先选择答案！');
+        return;
+    }
+    const cmd = `/阅读答案 ${answer}`;
+    navigator.clipboard.writeText(cmd).then(() => {
+        alert('✅ 答案已复制！\n发送给我完成标记吧！\n\n命令：' + cmd);
+    }).catch(() => {
+        prompt('复制失败，请手动复制：', cmd);
+    });
+}
+
+document.addEventListener('change', updateAnswer);
+</script>
+</body>
+</html>

@@ -8,7 +8,7 @@
   "command_submit_answer": {
     "description": "📝 提交做题答案",
     "type": "string",
-    "default": "答案",
+    "default": "阅读答案",
     "hint": "做完阅读后提交选项，满分才算通过。触发格式：/答案 ABCD"
   },
   "command_check_answer": {
@@ -84,5 +84,23 @@
     "type": "string",
     "default": "使用文档",
     "hint": "在聊天框输出插件的动态使用说明书及大考倒计时"
+  },
+  "command_listening": {
+    "description": "🎧 抽取听力真题",
+    "type": "string",
+    "default": "来个听力",
+    "hint": "抽取一套未刷过的四六级听力真题，生成HTML文件（音频已嵌入）"
+  },
+  "command_listen_answer": {
+    "description": "📝 提交听力答案",
+    "type": "string",
+    "default": "听力答案",
+    "hint": "做完听力后提交选项，系统按Section统计得分。触发格式：/听力答案 ABCDABCD..."
+  },
+  "command_listen_skip": {
+    "description": "⏭️ 跳过当前听力",
+    "type": "string",
+    "default": "听力跳过",
+    "hint": "跳过当前听力套题，标记为已做"
   }
 }
