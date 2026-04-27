@@ -265,7 +265,8 @@ class CET6Tutor(Star):
 
         if not raw_ans: return None
         clean_ans = "".join([char for char in raw_ans if char.isalpha()])
-        return clean_ans[:expected_len] if len(clean_ans) >= expected_len else clean_ans
+        if len(clean_ans) < expected_len: return None
+        return clean_ans[:expected_len]
 
     # ==========================================
     # 📖 阅读 HTML 生成模块
@@ -299,17 +300,22 @@ class CET6Tutor(Star):
         is_section_b = 'B' in sec_type and 'A' not in sec_type and 'C' not in sec_type
         is_section_a = 'A' in sec_type and 'B' not in sec_type and 'C' not in sec_type
 
-        # Section B 段落匹配：先扫描有哪些段落标签
+        # Section B 段落匹配：先扫描有哪些段落标签（去重，保留首次出现的顺序）
+        # 支持两种格式：【 A 】 和 [A]
         paragraph_labels = []
+        seen_labels = set()
         if is_section_b:
             for line in lines:
                 # 匹配【 A 】或【A】格式的段落标签
                 label_match = re.search(r'【\s*([A-Z])\s*】', line)
+                if not label_match:
+                    # 尝试匹配 [A] 格式
+                    label_match = re.search(r'\[([A-Z])\]', line)
                 if label_match:
                     label = label_match.group(1)
-                    if label not in paragraph_labels:
+                    if label not in seen_labels:
+                        seen_labels.add(label)
                         paragraph_labels.append(label)
-            paragraph_labels.sort()
 
         for line in lines:
             line_stripped = line.strip()
@@ -363,12 +369,12 @@ class CET6Tutor(Star):
                 html_parts.append(f'<label><input type="radio" name="q_{current_q_num}" value="{letter}"> {letter}. {self._escape_html(text)}</label>')
                 continue
 
-            # 检查是否是 Section A 的词库行 (A)word  I)word)
-            if is_section_a and 'A)' in line_stripped and 'I)' in line_stripped:
+            # 检查是否是 Section A 的词库行（包含字母后跟 ) 格式的行）
+            if is_section_a and re.search(r'[A-Z]\)', line_stripped.replace('\xa0', ' ').replace('）', ')')):
                 # 解析词库芯片
                 word_bank_items = []
                 # 用正则匹配所有 A)word 格式
-                for m in re.finditer(r'([A-O])\)\s*([^\s]+)', line_stripped.replace('\xa0', ' ')):
+                for m in re.finditer(r'([A-O])\)\s*([^\s]+)', line_stripped.replace('\xa0', ' ').replace('）', ')')):
                     letter, word = m.group(1), m.group(2).strip()
                     word_bank_items.append(f'<span class="word-chip" onclick="selectWord(\'{letter}\')">{letter}) {self._escape_html(word)}</span>')
                 if word_bank_items:
@@ -415,7 +421,7 @@ class CET6Tutor(Star):
         html = html.replace('{{set_idx}}', set_idx)
         html = html.replace('{{sec_type}}', sec_type)
         html = html.replace('{{content}}', content_html)
-        html = html.replace('{{answers}}', correct_ans)  # 嵌入正确答案
+        html = html.replace('{{answers}}', correct_ans or '')  # 嵌入正确答案（空字符串防止 None）
         html = html.replace('{{result_key}}', q_id)  # 嵌入结果key用于标记完成
 
         # 保存文件
